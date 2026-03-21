@@ -155,7 +155,10 @@ class CompareMusicModelsIntegrationTests(unittest.TestCase):
             temp_root = Path(temp_dir)
             stub_root = temp_root / "stub_modules"
             model_dir = temp_root / "melodyflow"
+            melodyflow_space_dir = temp_root / "MelodyFlowSpace"
             model_dir.mkdir()
+            (melodyflow_space_dir / "audiocraft" / "models").mkdir(parents=True)
+            (melodyflow_space_dir / "audiocraft" / "models" / "melodyflow.py").write_text("", encoding="utf-8")
 
             for package in ["torch", "audiocraft", "xformers", "transformers"]:
                 package_dir = stub_root / package
@@ -167,6 +170,7 @@ class CompareMusicModelsIntegrationTests(unittest.TestCase):
             env = os.environ.copy()
             env["MELODYFLOW_PYTHON"] = sys.executable
             env["MELODYFLOW_MODEL_DIR"] = str(model_dir)
+            env["MELODYFLOW_SPACE_DIR"] = str(melodyflow_space_dir)
             env["PYTHONPATH"] = str(stub_root)
 
             completed = subprocess.run(
