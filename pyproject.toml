@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aimusicapp"
+version = "0.1.0"
+description = "Standalone desktop workstation for comparing local music-generation backends."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "soundfile",
+    "Pillow",
+    "scipy",
+    "pydub",
+    "imageio-ffmpeg",
+    "huggingface_hub",
+]
+
+[project.scripts]
+aimusicapp-gui = "tools.ai.music_compare_gui:main"
+aimusicapp-bootstrap = "tools.common.bootstrap_aimusicapp:main"
+aimusicapp-check-backends = "tools.ai.check_music_backends:main"
+aimusicapp-compare = "tools.ai.compare_music_models:main"
+aimusicapp-transcribe-lyrics = "tools.voice.transcribe_lyrics:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["tools*"]

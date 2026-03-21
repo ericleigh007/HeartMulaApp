@@ -59,7 +59,7 @@ bootstrap_AIMusicApp.bat
 What that does by default:
 
 - creates `.venv` if missing
-- installs the app-layer Python requirements from `requirements.txt`
+- installs AIMusicApp into `.venv` with `pip install -e .`
 - clones or updates the repo-local loader checkouts in `third_party/`
 
 Optional full asset bootstrap:
@@ -96,6 +96,12 @@ Direct Python launch from the repo root:
 python tools\ai\music_compare_gui.py
 ```
 
+Installed console entry point after `pip install -e .`:
+
+```powershell
+aimusicapp-gui
+```
+
 ## Recommended Local Setup
 
 The app expects local model assets and Python environments to exist under this repo when you want the optional backends.
@@ -113,6 +119,16 @@ Typical local pieces:
 - `models/heartmula/base` for HeartMuLa Base checkpoints
 - `models/comparison/...` for MelodyFlow, ACE-Step, and ACE-Step 1.5 model folders
 
+Repo-local backend env setup helpers:
+
+- `setup_app_env.bat`
+- `setup_heartmula_env.bat`
+- `setup_melodyflow_env.bat`
+- `setup_acestep_env.bat`
+- `setup_acestep15_env.bat`
+
+These scripts create the corresponding `.venv*` directory under the repo and install the best-known package surface for that backend. The loader-specific scripts expect the corresponding checkout under `third_party/`, so run `bootstrap_AIMusicApp.bat` first.
+
 ## Build And Environment Notes
 
 AIMusicApp is a local Python workstation, not a compiled desktop build. There is no separate packaging or binary build step required for normal use.
@@ -128,10 +144,28 @@ Minimum operational checklist:
 
 1. Clone the repo.
 2. Run `bootstrap_AIMusicApp.bat`.
-3. Ensure the app environment can launch `tools/ai/music_compare_gui.py`.
-4. Ensure `.venv-heartmula` can import `heartlib` if you want HeartMuLa.
-5. Ensure each optional backend environment is installed only if you intend to use that backend.
+3. Run `setup_app_env.bat` if you want a dedicated repo-local app env.
+4. Run the backend env setup script for each backend you actually plan to use.
+5. Ensure `.venv-heartmula` can import `heartlib` if you want HeartMuLa.
+6. Ensure each optional backend environment is installed only if you intend to use that backend.
 6. Run `Check Setup` in the app before your first comparison run.
+
+## Packaging And Build
+
+AIMusicApp now includes [pyproject.toml](pyproject.toml) so visitors can install it directly from a fresh clone.
+
+Editable install:
+
+```powershell
+pip install -e .
+```
+
+Wheel and source distribution build:
+
+```powershell
+python -m pip install build
+python -m build
+```
 
 ## Main Window Overview
 

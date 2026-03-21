@@ -6,3 +6,6 @@ __pycache__/
 models/
 third_party/
 bin/
+build/
+dist/
+*.egg-info/

@@ -14,6 +14,7 @@ THIRD_PARTY_ROOT = REPO_ROOT / "third_party"
 MODELS_ROOT = REPO_ROOT / "models"
 TMP_ROOT = REPO_ROOT / ".tmp"
 REQUIREMENTS_PATH = REPO_ROOT / "requirements.txt"
+PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 
 HEARTLIB_REPO_URL = "https://github.com/ericleigh007/heartlib.git"
 ACESTEP_REPO_URL = "https://github.com/ericleigh007/ACE-Step.git"
@@ -94,7 +95,10 @@ def _ensure_venv(*, dry_run: bool) -> dict[str, object]:
 def _install_requirements(venv_python: Path, *, dry_run: bool) -> list[dict[str, object]]:
     steps = []
     steps.append(_run([str(venv_python), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], dry_run=dry_run))
-    steps.append(_run([str(venv_python), "-m", "pip", "install", "-r", str(REQUIREMENTS_PATH)], dry_run=dry_run))
+    if PYPROJECT_PATH.exists():
+        steps.append(_run([str(venv_python), "-m", "pip", "install", "-e", str(REPO_ROOT)], dry_run=dry_run))
+    else:
+        steps.append(_run([str(venv_python), "-m", "pip", "install", "-r", str(REQUIREMENTS_PATH)], dry_run=dry_run))
     return steps
 
 
