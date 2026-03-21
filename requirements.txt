@@ -1,0 +1,7 @@
+numpy
+soundfile
+Pillow
+scipy
+pydub
+imageio-ffmpeg
+huggingface_hub
