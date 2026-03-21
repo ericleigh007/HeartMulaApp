@@ -167,6 +167,33 @@ python -m pip install build
 python -m build
 ```
 
+Release smoke test from a fresh environment:
+
+```powershell
+$basePython = "C:\path\to\python.exe"
+
+# Build the wheel in an isolated environment
+& $basePython -m venv .tmp\smoke-build
+& .\.tmp\smoke-build\Scripts\python.exe -m pip install --upgrade pip build
+& .\.tmp\smoke-build\Scripts\python.exe -m build
+
+# Install the wheel into a separate isolated environment
+& $basePython -m venv .tmp\smoke-install
+& .\.tmp\smoke-install\Scripts\python.exe -m pip install --upgrade pip
+& .\.tmp\smoke-install\Scripts\python.exe -m pip install .\dist\aimusicapp-0.1.0-py3-none-any.whl
+
+# Run these from outside the repo root so Python cannot import the local source tree
+Set-Location $env:TEMP
+& "c:\path\to\AIMusicApp\.tmp\smoke-install\Scripts\python.exe" -c "import tools.ai.music_compare_gui as m; print(m.__file__)"
+& "c:\path\to\AIMusicApp\.tmp\smoke-install\Scripts\aimusicapp-check-backends.exe" --help
+```
+
+Expected smoke-test result:
+
+- the import path prints from `site-packages`, not from the repo checkout
+- `aimusicapp-check-backends --help` prints usage successfully
+- the repo-local test suite still passes from the repo root
+
 ## Main Window Overview
 
 The window has three working areas:
