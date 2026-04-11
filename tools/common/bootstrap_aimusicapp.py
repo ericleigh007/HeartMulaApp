@@ -21,6 +21,47 @@ ACESTEP_REPO_URL = "https://github.com/ericleigh007/ACE-Step.git"
 ACESTEP15_REPO_URL = "https://github.com/ericleigh007/ACE-Step-1.5.git"
 MELODYFLOW_SPACE_REPO_ID = "facebook/MelodyFlow"
 HEARTMULA_BASE_MODEL_REPO = "HeartMuLa/HeartMuLa-oss-3B"
+DEFAULT_BOOTSTRAP_MODELS = ["heartmula_hny", "heartmula_base", "melodyflow", "ace_step", "ace_step_v15_turbo", "ace_step_v15_sft"]
+BOOTSTRAP_MODEL_CHOICES = [*DEFAULT_BOOTSTRAP_MODELS, "ace_step_v15", "audiox"]
+
+
+def _normalize_bootstrap_model_name(model_name: str) -> str:
+    normalized = (model_name or "").strip().lower()
+    if normalized == "ace_step_v15":
+        return "ace_step_v15_turbo"
+    return normalized
+
+
+def _load_model_selection(model_config_path: str | None, cli_models: list[str] | None, *, include_audiox: bool) -> list[str]:
+    selected_models = [_normalize_bootstrap_model_name(name) for name in (cli_models or DEFAULT_BOOTSTRAP_MODELS)]
+    if model_config_path:
+        payload = json.loads(Path(model_config_path).read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            models_payload = payload.get("models", payload)
+            if isinstance(models_payload, dict):
+                selected_models = [_normalize_bootstrap_model_name(name) for name, enabled in models_payload.items() if enabled]
+            elif isinstance(models_payload, list):
+                selected_models = [_normalize_bootstrap_model_name(name) for name in models_payload]
+            else:
+                raise ValueError("Model config must contain a 'models' list or object.")
+        elif isinstance(payload, list):
+            selected_models = [_normalize_bootstrap_model_name(name) for name in payload]
+        else:
+            raise ValueError("Model config must be a list or object.")
+
+    if include_audiox and "audiox" not in selected_models:
+        selected_models.append("audiox")
+
+    deduped = []
+    seen = set()
+    for model_name in selected_models:
+        if model_name not in BOOTSTRAP_MODEL_CHOICES:
+            raise ValueError(f"Unsupported bootstrap model selection: {model_name}")
+        if model_name in seen:
+            continue
+        seen.add(model_name)
+        deduped.append(model_name)
+    return deduped
 
 
 def _venv_python_path() -> Path:
@@ -126,64 +167,70 @@ def _download_repo_local(
     return {"repo_id": repo_id, "status": "downloaded" if not dry_run else "planned", "path": str(destination)}
 
 
-def _download_models(venv_python: Path, *, include_audiox: bool, dry_run: bool) -> list[dict[str, object]]:
+def _download_models(venv_python: Path, *, selected_models: list[str], dry_run: bool) -> list[dict[str, object]]:
     results: list[dict[str, object]] = []
-    results.append(
-        _download_repo_local(
-            venv_python,
-            MELODYFLOW_SPACE_REPO_ID,
-            TMP_ROOT / "MelodyFlowSpace",
-            repo_type="space",
-            dry_run=dry_run,
+    if "melodyflow" in selected_models:
+        results.append(
+            _download_repo_local(
+                venv_python,
+                MELODYFLOW_SPACE_REPO_ID,
+                TMP_ROOT / "MelodyFlowSpace",
+                repo_type="space",
+                dry_run=dry_run,
+            )
         )
-    )
 
-    heart_hny_command = [
-        str(venv_python),
-        str(REPO_ROOT / "tools" / "ai" / "setup_heartmula_checkpoints.py"),
-        "--destination",
-        str(MODELS_ROOT / "heartmula" / "happy-new-year"),
-        "--include-transcriptor",
-    ]
-    if dry_run:
-        heart_hny_command.append("--dry-run")
-    results.append({"repo_id": "HeartMuLa HNY bundle", "status": "planned" if dry_run else "invoked", "command": heart_hny_command})
-    hny_result = _run(heart_hny_command, dry_run=dry_run)
-    if not hny_result["ok"]:
-        results.append({"repo_id": "HeartMuLa HNY bundle", "status": "failed", "details": hny_result["result"]})
+    if "heartmula_hny" in selected_models:
+        heart_hny_command = [
+            str(venv_python),
+            str(REPO_ROOT / "tools" / "ai" / "setup_heartmula_checkpoints.py"),
+            "--destination",
+            str(MODELS_ROOT / "heartmula" / "happy-new-year"),
+            "--include-transcriptor",
+        ]
+        if dry_run:
+            heart_hny_command.append("--dry-run")
+        results.append({"repo_id": "HeartMuLa HNY bundle", "status": "planned" if dry_run else "invoked", "command": heart_hny_command})
+        hny_result = _run(heart_hny_command, dry_run=dry_run)
+        if not hny_result["ok"]:
+            results.append({"repo_id": "HeartMuLa HNY bundle", "status": "failed", "details": hny_result["result"]})
 
-    heart_base_command = [
-        str(venv_python),
-        str(REPO_ROOT / "tools" / "ai" / "setup_heartmula_checkpoints.py"),
-        "--destination",
-        str(MODELS_ROOT / "heartmula" / "base"),
-        "--model-repo",
-        HEARTMULA_BASE_MODEL_REPO,
-    ]
-    if dry_run:
-        heart_base_command.append("--dry-run")
-    results.append({"repo_id": "HeartMuLa base bundle", "status": "planned" if dry_run else "invoked", "command": heart_base_command})
-    base_result = _run(heart_base_command, dry_run=dry_run)
-    if not base_result["ok"]:
-        results.append({"repo_id": "HeartMuLa base bundle", "status": "failed", "details": base_result["result"]})
+    if "heartmula_base" in selected_models:
+        heart_base_command = [
+            str(venv_python),
+            str(REPO_ROOT / "tools" / "ai" / "setup_heartmula_checkpoints.py"),
+            "--destination",
+            str(MODELS_ROOT / "heartmula" / "base"),
+            "--model-repo",
+            HEARTMULA_BASE_MODEL_REPO,
+        ]
+        if dry_run:
+            heart_base_command.append("--dry-run")
+        results.append({"repo_id": "HeartMuLa base bundle", "status": "planned" if dry_run else "invoked", "command": heart_base_command})
+        base_result = _run(heart_base_command, dry_run=dry_run)
+        if not base_result["ok"]:
+            results.append({"repo_id": "HeartMuLa base bundle", "status": "failed", "details": base_result["result"]})
 
-    comparison_models = ["melodyflow", "ace_step", "ace_step_v15"]
-    if include_audiox:
-        comparison_models.insert(0, "audiox")
-    comparison_command = [
-        str(venv_python),
-        str(REPO_ROOT / "tools" / "ai" / "setup_comparison_model_repos.py"),
-        "--destination",
-        str(MODELS_ROOT / "comparison"),
-        "--models",
-        *comparison_models,
+    comparison_models = [
+        name
+        for name in selected_models
+        if name in {"audiox", "melodyflow", "ace_step", "ace_step_v15", "ace_step_v15_turbo", "ace_step_v15_sft"}
     ]
-    if dry_run:
-        comparison_command.append("--dry-run")
-    results.append({"repo_id": "Comparison model repos", "status": "planned" if dry_run else "invoked", "command": comparison_command})
-    comparison_result = _run(comparison_command, dry_run=dry_run)
-    if not comparison_result["ok"]:
-        results.append({"repo_id": "Comparison model repos", "status": "failed", "details": comparison_result["result"]})
+    if comparison_models:
+        comparison_command = [
+            str(venv_python),
+            str(REPO_ROOT / "tools" / "ai" / "setup_comparison_model_repos.py"),
+            "--destination",
+            str(MODELS_ROOT / "comparison"),
+            "--models",
+            *comparison_models,
+        ]
+        if dry_run:
+            comparison_command.append("--dry-run")
+        results.append({"repo_id": "Comparison model repos", "status": "planned" if dry_run else "invoked", "command": comparison_command})
+        comparison_result = _run(comparison_command, dry_run=dry_run)
+        if not comparison_result["ok"]:
+            results.append({"repo_id": "Comparison model repos", "status": "failed", "details": comparison_result["result"]})
 
     return results
 
@@ -194,6 +241,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-install", action="store_true")
     parser.add_argument("--skip-loaders", action="store_true")
     parser.add_argument("--download-models", action="store_true")
+    parser.add_argument("--models", nargs="+", choices=BOOTSTRAP_MODEL_CHOICES, default=None)
+    parser.add_argument("--model-config", default=None)
     parser.add_argument("--include-audiox", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -208,11 +257,16 @@ def main() -> None:
     summary: dict[str, object] = {
         "repo_root": str(REPO_ROOT),
         "dry_run": args.dry_run,
+        "selected_models": None,
+        "model_config": args.model_config,
         "venv": None,
         "requirements": [],
         "loader_checkouts": [],
         "model_downloads": [],
     }
+
+    selected_models = _load_model_selection(args.model_config, args.models, include_audiox=args.include_audiox)
+    summary["selected_models"] = selected_models
 
     if not args.skip_venv:
         venv_summary = _ensure_venv(dry_run=args.dry_run)
@@ -232,7 +286,7 @@ def main() -> None:
         ]
 
     if args.download_models:
-        summary["model_downloads"] = _download_models(venv_python, include_audiox=args.include_audiox, dry_run=args.dry_run)
+        summary["model_downloads"] = _download_models(venv_python, selected_models=selected_models, dry_run=args.dry_run)
 
     summary_path = TMP_ROOT / "bootstrap_summary.json"
     if not args.dry_run:

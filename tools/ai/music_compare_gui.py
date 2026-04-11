@@ -51,6 +51,14 @@ def _pick_python_path(preferred_paths: list[Path], fallback: str) -> str:
     return fallback
 
 
+def _first_nonempty_env_value(env: Mapping[str, str], keys: list[str], default: str = "") -> str:
+    for key in keys:
+        value = env.get(key, "").strip()
+        if value:
+            return value
+    return default
+
+
 def detect_default_backend_settings(
     repo_root: Path,
     environ: Mapping[str, str] | None = None,
@@ -79,6 +87,22 @@ def detect_default_backend_settings(
         "ACESTEP15_ROOT": env.get("ACESTEP15_ROOT", "").strip(),
         "ACESTEP15_CKPT_DIR": env.get("ACESTEP15_CKPT_DIR", "").strip(),
         "ACESTEP15_PYTHON": env.get("ACESTEP15_PYTHON", "").strip(),
+        "ACESTEP15_TURBO_CONFIG_PATH": env.get("ACESTEP15_TURBO_CONFIG_PATH", "").strip(),
+        "ACESTEP15_SFT_CONFIG_PATH": env.get("ACESTEP15_SFT_CONFIG_PATH", "").strip(),
+        "ACESTEP15_TURBO_INIT_LLM": _first_nonempty_env_value(env, ["ACESTEP15_TURBO_INIT_LLM", "ACESTEP15_INIT_LLM"]),
+        "ACESTEP15_TURBO_LM_MODEL_PATH": _first_nonempty_env_value(env, ["ACESTEP15_TURBO_LM_MODEL_PATH", "ACESTEP15_LM_MODEL_PATH"]),
+        "ACESTEP15_TURBO_LM_BACKEND": _first_nonempty_env_value(env, ["ACESTEP15_TURBO_LM_BACKEND", "ACESTEP15_LM_BACKEND"]),
+        "ACESTEP15_TURBO_INFERENCE_STEPS": _first_nonempty_env_value(env, ["ACESTEP15_TURBO_INFERENCE_STEPS", "ACESTEP15_INFERENCE_STEPS"]),
+        "ACESTEP15_TURBO_GUIDANCE_SCALE": _first_nonempty_env_value(env, ["ACESTEP15_TURBO_GUIDANCE_SCALE", "ACESTEP15_GUIDANCE_SCALE"]),
+        "ACESTEP15_SFT_INIT_LLM": _first_nonempty_env_value(env, ["ACESTEP15_SFT_INIT_LLM", "ACESTEP15_INIT_LLM"]),
+        "ACESTEP15_SFT_LM_MODEL_PATH": _first_nonempty_env_value(env, ["ACESTEP15_SFT_LM_MODEL_PATH", "ACESTEP15_LM_MODEL_PATH"]),
+        "ACESTEP15_SFT_LM_BACKEND": _first_nonempty_env_value(env, ["ACESTEP15_SFT_LM_BACKEND", "ACESTEP15_LM_BACKEND"]),
+        "ACESTEP15_SFT_INFERENCE_STEPS": _first_nonempty_env_value(env, ["ACESTEP15_SFT_INFERENCE_STEPS", "ACESTEP15_INFERENCE_STEPS"]),
+        "ACESTEP15_SFT_GUIDANCE_SCALE": _first_nonempty_env_value(env, ["ACESTEP15_SFT_GUIDANCE_SCALE", "ACESTEP15_GUIDANCE_SCALE"]),
+        "ACESTEP15_TASK_TYPE": env.get("ACESTEP15_TASK_TYPE", DEFAULT_ACESTEP15_TASK_TYPE).strip(),
+        "ACESTEP15_COVER_STRENGTH": env.get("ACESTEP15_COVER_STRENGTH", DEFAULT_ACESTEP15_COVER_STRENGTH).strip(),
+        "ACESTEP15_REPAINT_START": env.get("ACESTEP15_REPAINT_START", DEFAULT_ACESTEP15_REPAINT_START).strip(),
+        "ACESTEP15_REPAINT_END": env.get("ACESTEP15_REPAINT_END", DEFAULT_ACESTEP15_REPAINT_END).strip(),
     }
 
     if not defaults["HEARTMULA_ROOT"]:
@@ -119,7 +143,46 @@ def detect_default_backend_settings(
     if not defaults["ACESTEP15_CKPT_DIR"] and defaults["ACESTEP15_ROOT"]:
         defaults["ACESTEP15_CKPT_DIR"] = _resolve_existing_path(Path(defaults["ACESTEP15_ROOT"]) / "checkpoints")
     if not defaults["ACESTEP15_PYTHON"]:
-        defaults["ACESTEP15_PYTHON"] = _pick_python_path([repo_root / ".venv-acestep15" / "Scripts" / "python.exe"], fallback)
+        defaults["ACESTEP15_PYTHON"] = _pick_python_path(
+            [
+                repo_root / "third_party" / "ACE-Step-1.5" / ".venv" / "Scripts" / "python.exe",
+                repo_root / ".venv-acestep15" / "Scripts" / "python.exe",
+            ],
+            fallback,
+        )
+    if not defaults["ACESTEP15_TURBO_CONFIG_PATH"]:
+        defaults["ACESTEP15_TURBO_CONFIG_PATH"] = DEFAULT_ACESTEP15_TURBO_CONFIG
+    if not defaults["ACESTEP15_SFT_CONFIG_PATH"]:
+        defaults["ACESTEP15_SFT_CONFIG_PATH"] = DEFAULT_ACESTEP15_SFT_CONFIG
+    acestep15_has_shared_lm = bool(defaults["ACESTEP15_CKPT_DIR"] and Path(defaults["ACESTEP15_CKPT_DIR"]).joinpath(DEFAULT_ACESTEP15_LM_MODEL).exists())
+    if not defaults["ACESTEP15_TURBO_INIT_LLM"]:
+        defaults["ACESTEP15_TURBO_INIT_LLM"] = "true" if acestep15_has_shared_lm else "false"
+    if not defaults["ACESTEP15_TURBO_LM_MODEL_PATH"]:
+        defaults["ACESTEP15_TURBO_LM_MODEL_PATH"] = DEFAULT_ACESTEP15_LM_MODEL
+    if not defaults["ACESTEP15_TURBO_LM_BACKEND"]:
+        defaults["ACESTEP15_TURBO_LM_BACKEND"] = DEFAULT_ACESTEP15_LM_BACKEND
+    if not defaults["ACESTEP15_TURBO_INFERENCE_STEPS"]:
+        defaults["ACESTEP15_TURBO_INFERENCE_STEPS"] = DEFAULT_ACESTEP15_TURBO_STEPS
+    if not defaults["ACESTEP15_TURBO_GUIDANCE_SCALE"]:
+        defaults["ACESTEP15_TURBO_GUIDANCE_SCALE"] = DEFAULT_ACESTEP15_TURBO_GUIDANCE_SCALE
+    if not defaults["ACESTEP15_SFT_INIT_LLM"]:
+        defaults["ACESTEP15_SFT_INIT_LLM"] = "true" if acestep15_has_shared_lm else "false"
+    if not defaults["ACESTEP15_SFT_LM_MODEL_PATH"]:
+        defaults["ACESTEP15_SFT_LM_MODEL_PATH"] = DEFAULT_ACESTEP15_LM_MODEL
+    if not defaults["ACESTEP15_SFT_LM_BACKEND"]:
+        defaults["ACESTEP15_SFT_LM_BACKEND"] = DEFAULT_ACESTEP15_LM_BACKEND
+    if not defaults["ACESTEP15_SFT_INFERENCE_STEPS"]:
+        defaults["ACESTEP15_SFT_INFERENCE_STEPS"] = DEFAULT_ACESTEP15_SFT_STEPS
+    if not defaults["ACESTEP15_SFT_GUIDANCE_SCALE"]:
+        defaults["ACESTEP15_SFT_GUIDANCE_SCALE"] = DEFAULT_ACESTEP15_SFT_GUIDANCE_SCALE
+    if not defaults["ACESTEP15_TASK_TYPE"]:
+        defaults["ACESTEP15_TASK_TYPE"] = DEFAULT_ACESTEP15_TASK_TYPE
+    if not defaults["ACESTEP15_COVER_STRENGTH"]:
+        defaults["ACESTEP15_COVER_STRENGTH"] = DEFAULT_ACESTEP15_COVER_STRENGTH
+    if not defaults["ACESTEP15_REPAINT_START"]:
+        defaults["ACESTEP15_REPAINT_START"] = DEFAULT_ACESTEP15_REPAINT_START
+    if not defaults["ACESTEP15_REPAINT_END"]:
+        defaults["ACESTEP15_REPAINT_END"] = DEFAULT_ACESTEP15_REPAINT_END
 
     return defaults
 
@@ -134,6 +197,31 @@ def load_gui_settings(settings_path: Path = GUI_SETTINGS_PATH) -> dict[str, str]
     if not isinstance(payload, dict):
         return {}
     return {str(key): str(value) for key, value in payload.items() if isinstance(value, (str, int, float))}
+
+
+def _python_supports_modules(python_path: str, required_modules: list[str]) -> bool:
+    candidate = python_path.strip()
+    if not candidate or not python_exists(candidate):
+        return False
+    return not find_missing_python_modules(candidate, required_modules)
+
+
+def merge_gui_settings(detected_settings: Mapping[str, str], saved_settings: Mapping[str, str]) -> dict[str, str]:
+    merged = dict(detected_settings)
+    for key, value in saved_settings.items():
+        normalized = str(value).strip()
+        if not normalized:
+            continue
+        required_modules = BACKEND_PYTHON_MODULES.get(key)
+        if required_modules:
+            detected_python = str(detected_settings.get(key, "")).strip()
+            if detected_python and normalized != detected_python:
+                saved_ready = _python_supports_modules(normalized, required_modules)
+                detected_ready = _python_supports_modules(detected_python, required_modules)
+                if not saved_ready and detected_ready:
+                    continue
+        merged[key] = str(value)
+    return merged
 
 
 def save_gui_settings(settings: Mapping[str, str], settings_path: Path = GUI_SETTINGS_PATH) -> None:
@@ -200,7 +288,7 @@ def configure_ffmpeg() -> str | None:
 
 FFMPEG_BINARY = configure_ffmpeg()
 
-from tools.ai.music_backend_checks import collect_preflight_issues
+from tools.ai.music_backend_checks import collect_preflight_issues, find_missing_python_modules, python_exists
 from tools.ai.music_model_backends import MusicGenRequest, get_backend_registry
 
 
@@ -210,15 +298,37 @@ DEFAULT_MELODYFLOW_MODEL_DIR = str((REPO_ROOT / "models" / "comparison" / "melod
 DEFAULT_ACESTEP_MODEL_DIR = str((REPO_ROOT / "models" / "comparison" / "ace-step" / "ACE-Step-v1-3.5B").resolve())
 DEFAULT_ACESTEP15_ROOT = str((REPO_ROOT / "third_party" / "ACE-Step-1.5").resolve())
 DEFAULT_ACESTEP15_CKPT_DIR = str((REPO_ROOT / "models" / "comparison" / "ace-step-1.5" / "checkpoints").resolve())
+DEFAULT_ACESTEP15_TURBO_CONFIG = "acestep-v15-turbo"
+DEFAULT_ACESTEP15_SFT_CONFIG = "acestep-v15-sft"
+DEFAULT_ACESTEP15_LM_MODEL = "acestep-5Hz-lm-1.7B"
+DEFAULT_ACESTEP15_LM_BACKEND = "vllm"
+DEFAULT_ACESTEP15_TURBO_STEPS = "8"
+DEFAULT_ACESTEP15_SFT_STEPS = "50"
+DEFAULT_ACESTEP15_TURBO_GUIDANCE_SCALE = "1.0"
+DEFAULT_ACESTEP15_SFT_GUIDANCE_SCALE = "7.0"
+DEFAULT_ACESTEP15_TASK_TYPE = "auto"
+DEFAULT_ACESTEP15_COVER_STRENGTH = "1.0"
+DEFAULT_ACESTEP15_REPAINT_START = "0.0"
+DEFAULT_ACESTEP15_REPAINT_END = "-1.0"
 DEFAULT_SEPARATOR_MODEL = "vocals_mel_band_roformer.ckpt"
 HEARTMULA_CODEC_DTYPE_OPTIONS = ["float32", "bfloat16"]
 THEME_OPTIONS = ["dark", "light"]
+ACESTEP15_TASK_OPTIONS = ["auto", "text2music", "cover", "repaint"]
+ACESTEP15_LM_BACKEND_OPTIONS = ["vllm", "pt"]
+BACKEND_PYTHON_MODULES = {
+    "HEARTMULA_PYTHON": ["torch", "torchaudio", "soundfile", "heartlib"],
+    "AUDIOX_PYTHON": ["torch", "torchaudio", "einops", "soundfile", "audiox"],
+    "MELODYFLOW_PYTHON": ["torch", "soundfile", "omegaconf", "transformers", "sentencepiece", "torchdiffeq", "audiocraft", "xformers"],
+    "ACESTEP_PYTHON": ["torch", "torchaudio", "soundfile", "acestep"],
+    "ACESTEP15_PYTHON": ["torch", "torchaudio", "soundfile", "acestep"],
+}
 MODEL_OPTIONS = [
     ("heartmula_hny", "HeartMuLa Happy New Year"),
     ("heartmula_base", "HeartMuLa Base 3B"),
     ("melodyflow", "MelodyFlow"),
     ("ace_step", "ACE-Step v1-3.5B"),
-    ("ace_step_v15", "ACE-Step 1.5"),
+    ("ace_step_v15_turbo", "ACE-Step 1.5 Turbo"),
+    ("ace_step_v15_sft", "ACE-Step 1.5 SFT"),
 ]
 BACKEND_FIELD_HINTS = {
     "heartmula_hny": (
@@ -231,7 +341,14 @@ BACKEND_FIELD_HINTS = {
     ),
     "melodyflow": "Valid inputs: prompt/chat. Reference audio editing is not exposed here yet. Lyrics and tags are ignored.",
     "ace_step": "Valid inputs: prompt/chat and/or tags and/or lyrics. Prompt/chat remains primary and tags are appended to the descriptor input. Reference audio is ignored.",
-    "ace_step_v15": "Valid inputs: prompt/chat and/or tags and/or lyrics. Prompt/chat remains primary and tags are appended to the descriptor input. Reference audio is ignored.",
+    "ace_step_v15_turbo": (
+        "Valid inputs: prompt/chat and/or tags and/or lyrics. Reference Audio enables cover or repaint tasks from the shared ACE-Step 1.5 settings. "
+        "Base-only tasks such as extract, lego, and complete are not exposed for Turbo or SFT."
+    ),
+    "ace_step_v15_sft": (
+        "Valid inputs: prompt/chat and/or tags and/or lyrics. Reference Audio enables cover or repaint tasks from the shared ACE-Step 1.5 settings. "
+        "Base-only tasks such as extract, lego, and complete are not exposed for Turbo or SFT."
+    ),
 }
 BACKEND_OUTPUT_FILENAMES = {
     "heartmula_hny": "heartmula_hny_output.wav",
@@ -239,6 +356,8 @@ BACKEND_OUTPUT_FILENAMES = {
     "melodyflow": "melodyflow_output.wav",
     "ace_step": "ace_step_output.wav",
     "ace_step_v15": "ace_step_v15_output.wav",
+    "ace_step_v15_turbo": "ace_step_v15_turbo_output.wav",
+    "ace_step_v15_sft": "ace_step_v15_sft_output.wav",
 }
 RATING_OPTIONS = ["", "1", "2", "3", "4", "5"]
 VISUAL_PANEL_SIZE = (360, 180)
@@ -674,7 +793,7 @@ class MusicCompareGui:
         saved_settings = load_gui_settings()
         if saved_settings.get("HEARTMULA_CKPT_DIR", "").strip() and not saved_settings.get("HEARTMULA_HNY_CKPT_DIR", "").strip():
             saved_settings["HEARTMULA_HNY_CKPT_DIR"] = saved_settings["HEARTMULA_CKPT_DIR"]
-        initial_settings = {**detected_settings, **{key: value for key, value in saved_settings.items() if value.strip()}}
+        initial_settings = merge_gui_settings(detected_settings, saved_settings)
 
         self.running = False
         self.monitor_stop = threading.Event()
@@ -703,6 +822,22 @@ class MusicCompareGui:
         self.acestep15_root_var = tk.StringVar(value=initial_settings.get("ACESTEP15_ROOT", DEFAULT_ACESTEP15_ROOT))
         self.acestep15_ckpt_var = tk.StringVar(value=initial_settings.get("ACESTEP15_CKPT_DIR", DEFAULT_ACESTEP15_CKPT_DIR))
         self.acestep15_python_var = tk.StringVar(value=initial_settings.get("ACESTEP15_PYTHON", sys.executable))
+        self.acestep15_turbo_config_var = tk.StringVar(value=initial_settings.get("ACESTEP15_TURBO_CONFIG_PATH", DEFAULT_ACESTEP15_TURBO_CONFIG))
+        self.acestep15_sft_config_var = tk.StringVar(value=initial_settings.get("ACESTEP15_SFT_CONFIG_PATH", DEFAULT_ACESTEP15_SFT_CONFIG))
+        self.acestep15_turbo_init_llm_var = tk.BooleanVar(value=initial_settings.get("ACESTEP15_TURBO_INIT_LLM", "false").strip().lower() in {"1", "true", "yes", "on"})
+        self.acestep15_turbo_lm_model_var = tk.StringVar(value=initial_settings.get("ACESTEP15_TURBO_LM_MODEL_PATH", DEFAULT_ACESTEP15_LM_MODEL))
+        self.acestep15_turbo_lm_backend_var = tk.StringVar(value=initial_settings.get("ACESTEP15_TURBO_LM_BACKEND", DEFAULT_ACESTEP15_LM_BACKEND))
+        self.acestep15_turbo_steps_var = tk.StringVar(value=initial_settings.get("ACESTEP15_TURBO_INFERENCE_STEPS", DEFAULT_ACESTEP15_TURBO_STEPS))
+        self.acestep15_turbo_guidance_var = tk.StringVar(value=initial_settings.get("ACESTEP15_TURBO_GUIDANCE_SCALE", DEFAULT_ACESTEP15_TURBO_GUIDANCE_SCALE))
+        self.acestep15_sft_init_llm_var = tk.BooleanVar(value=initial_settings.get("ACESTEP15_SFT_INIT_LLM", "false").strip().lower() in {"1", "true", "yes", "on"})
+        self.acestep15_sft_lm_model_var = tk.StringVar(value=initial_settings.get("ACESTEP15_SFT_LM_MODEL_PATH", DEFAULT_ACESTEP15_LM_MODEL))
+        self.acestep15_sft_lm_backend_var = tk.StringVar(value=initial_settings.get("ACESTEP15_SFT_LM_BACKEND", DEFAULT_ACESTEP15_LM_BACKEND))
+        self.acestep15_sft_steps_var = tk.StringVar(value=initial_settings.get("ACESTEP15_SFT_INFERENCE_STEPS", DEFAULT_ACESTEP15_SFT_STEPS))
+        self.acestep15_sft_guidance_var = tk.StringVar(value=initial_settings.get("ACESTEP15_SFT_GUIDANCE_SCALE", DEFAULT_ACESTEP15_SFT_GUIDANCE_SCALE))
+        self.acestep15_task_type_var = tk.StringVar(value=initial_settings.get("ACESTEP15_TASK_TYPE", DEFAULT_ACESTEP15_TASK_TYPE))
+        self.acestep15_cover_strength_var = tk.StringVar(value=initial_settings.get("ACESTEP15_COVER_STRENGTH", DEFAULT_ACESTEP15_COVER_STRENGTH))
+        self.acestep15_repaint_start_var = tk.StringVar(value=initial_settings.get("ACESTEP15_REPAINT_START", DEFAULT_ACESTEP15_REPAINT_START))
+        self.acestep15_repaint_end_var = tk.StringVar(value=initial_settings.get("ACESTEP15_REPAINT_END", DEFAULT_ACESTEP15_REPAINT_END))
         sample_audio_files = discover_sample_audio_files(REPO_ROOT)
         default_sample_audio = sample_audio_files[0] if sample_audio_files else ""
         self.sample_audio_files = sample_audio_files
@@ -715,7 +850,7 @@ class MusicCompareGui:
         self.transcription_skip_separation_var = tk.BooleanVar(value=initial_settings.get("TRANSCRIPTION_SKIP_SEPARATION", "false").strip().lower() in {"1", "true", "yes", "on"})
 
         self.model_vars = {
-            name: tk.BooleanVar(value=name != "ace_step_v15") for name, _ in MODEL_OPTIONS
+            name: tk.BooleanVar(value=name not in {"ace_step_v15_turbo", "ace_step_v15_sft"}) for name, _ in MODEL_OPTIONS
         }
         self.status_var = tk.StringVar(value="Ready")
         self.global_speed_var = tk.StringVar(value="Runtime: idle")
@@ -932,9 +1067,25 @@ class MusicCompareGui:
         self._add_labeled_entry(frame, 15, "ACE-Step 1.5 Root", self.acestep15_root_var, self._browse_acestep15_root)
         self._add_labeled_entry(frame, 16, "ACE-Step 1.5 Checkpoints", self.acestep15_ckpt_var, self._browse_acestep15_ckpt)
         self._add_labeled_entry(frame, 17, "ACE-Step 1.5 Python", self.acestep15_python_var, self._browse_acestep15_python)
+        self._add_labeled_entry(frame, 18, "ACE-Step 1.5 Turbo Config", self.acestep15_turbo_config_var)
+        ttk.Checkbutton(frame, text="ACE-Step 1.5 Turbo: initialize 5Hz LM (recommended)", variable=self.acestep15_turbo_init_llm_var).grid(row=19, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        self._add_labeled_entry(frame, 20, "ACE-Step 1.5 Turbo LM Model", self.acestep15_turbo_lm_model_var)
+        self._add_labeled_combobox(frame, 21, "ACE-Step 1.5 Turbo LM Backend", self.acestep15_turbo_lm_backend_var, ACESTEP15_LM_BACKEND_OPTIONS)
+        self._add_labeled_entry(frame, 22, "ACE-Step 1.5 Turbo Steps", self.acestep15_turbo_steps_var)
+        self._add_labeled_entry(frame, 23, "ACE-Step 1.5 Turbo Guidance", self.acestep15_turbo_guidance_var)
+        self._add_labeled_entry(frame, 24, "ACE-Step 1.5 SFT Config", self.acestep15_sft_config_var)
+        ttk.Checkbutton(frame, text="ACE-Step 1.5 SFT: initialize 5Hz LM (recommended)", variable=self.acestep15_sft_init_llm_var).grid(row=25, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        self._add_labeled_entry(frame, 26, "ACE-Step 1.5 SFT LM Model", self.acestep15_sft_lm_model_var)
+        self._add_labeled_combobox(frame, 27, "ACE-Step 1.5 SFT LM Backend", self.acestep15_sft_lm_backend_var, ACESTEP15_LM_BACKEND_OPTIONS)
+        self._add_labeled_entry(frame, 28, "ACE-Step 1.5 SFT Steps", self.acestep15_sft_steps_var)
+        self._add_labeled_entry(frame, 29, "ACE-Step 1.5 SFT Guidance", self.acestep15_sft_guidance_var)
+        self._add_labeled_combobox(frame, 30, "ACE-Step 1.5 Task", self.acestep15_task_type_var, ACESTEP15_TASK_OPTIONS)
+        self._add_labeled_entry(frame, 31, "ACE-Step 1.5 Cover Strength", self.acestep15_cover_strength_var)
+        self._add_labeled_entry(frame, 32, "ACE-Step 1.5 Repaint Start", self.acestep15_repaint_start_var)
+        self._add_labeled_entry(frame, 33, "ACE-Step 1.5 Repaint End", self.acestep15_repaint_end_var)
 
         help_text = tk.Text(frame, height=11, wrap="word")
-        help_text.grid(row=18, column=0, columnspan=3, sticky="nsew", pady=(12, 0))
+        help_text.grid(row=34, column=0, columnspan=3, sticky="nsew", pady=(12, 0))
         help_text.insert(
             "1.0",
             "Each model card shows:\n"
@@ -950,7 +1101,7 @@ class MusicCompareGui:
             "HeartMuLa Staged Decode keeps only one major model on the GPU at a time: it generates frames with HeartMuLa, moves the frames to CPU memory, unloads HeartMuLa, then loads HeartCodec and decodes. This is the current best low-memory mode for getting under a 12 GB cap while still using GPU decode.\n\n"
             "The HeartMuLa fast preset applies the quickest safe settings validated so far in this repo: CFG 1.5 with resident mode enabled.\n\n"
             "The HeartMuLa low-memory preset applies the memory-saving settings validated so far in this repo: CFG 1.0, bfloat16 codec, staged decode enabled, and lazy loading enabled.\n\n"
-            "MelodyFlow and both ACE-Step lines also need local runtime assets. The legacy ACE-Step slot points at the older v1-3.5B checkpoint layout. ACE-Step 1.5 follows the upstream fork in third_party/ACE-Step-1.5 and expects a checkpoints root containing folders such as acestep-v15-turbo, vae, and the LM models. MelodyFlow is currently wired for text-only generation in this comparison UI; reference-audio editing is not exposed here yet.\n\n"
+            "MelodyFlow and both ACE-Step lines also need local runtime assets. The legacy ACE-Step slot points at the older v1-3.5B checkpoint layout. ACE-Step 1.5 follows the upstream fork in third_party/ACE-Step-1.5 and expects a checkpoints root containing folders such as acestep-v15-turbo, acestep-v15-sft, vae, and the LM models. Turbo and SFT now have separate recommended defaults here: both can use the shared 1.7B LM when available, Turbo stays at 8 steps with low guidance, and SFT uses 50 steps with CFG enabled. All of those fields are overridable per model. The shared ACE-Step 1.5 task selector can stay on auto for text-only comparisons; if you set Reference Audio, auto switches those 1.5 backends to cover mode. Repaint is also exposed here through the shared start and end fields.\n\n"
             "Rendering progress is shown as live runtime plus measured audio currently written to the backend output file. Some models only flush that file near the end, so their progress can stay near zero until the final write."
         )
         help_text.configure(state="disabled")
@@ -1485,6 +1636,22 @@ class MusicCompareGui:
             "ACESTEP15_ROOT": self.acestep15_root_var.get().strip(),
             "ACESTEP15_CKPT_DIR": self.acestep15_ckpt_var.get().strip(),
             "ACESTEP15_PYTHON": self.acestep15_python_var.get().strip(),
+            "ACESTEP15_TURBO_CONFIG_PATH": self.acestep15_turbo_config_var.get().strip(),
+            "ACESTEP15_SFT_CONFIG_PATH": self.acestep15_sft_config_var.get().strip(),
+            "ACESTEP15_TURBO_INIT_LLM": "true" if self.acestep15_turbo_init_llm_var.get() else "false",
+            "ACESTEP15_TURBO_LM_MODEL_PATH": self.acestep15_turbo_lm_model_var.get().strip(),
+            "ACESTEP15_TURBO_LM_BACKEND": self.acestep15_turbo_lm_backend_var.get().strip(),
+            "ACESTEP15_TURBO_INFERENCE_STEPS": self.acestep15_turbo_steps_var.get().strip(),
+            "ACESTEP15_TURBO_GUIDANCE_SCALE": self.acestep15_turbo_guidance_var.get().strip(),
+            "ACESTEP15_SFT_INIT_LLM": "true" if self.acestep15_sft_init_llm_var.get() else "false",
+            "ACESTEP15_SFT_LM_MODEL_PATH": self.acestep15_sft_lm_model_var.get().strip(),
+            "ACESTEP15_SFT_LM_BACKEND": self.acestep15_sft_lm_backend_var.get().strip(),
+            "ACESTEP15_SFT_INFERENCE_STEPS": self.acestep15_sft_steps_var.get().strip(),
+            "ACESTEP15_SFT_GUIDANCE_SCALE": self.acestep15_sft_guidance_var.get().strip(),
+            "ACESTEP15_TASK_TYPE": self.acestep15_task_type_var.get().strip(),
+            "ACESTEP15_COVER_STRENGTH": self.acestep15_cover_strength_var.get().strip(),
+            "ACESTEP15_REPAINT_START": self.acestep15_repaint_start_var.get().strip(),
+            "ACESTEP15_REPAINT_END": self.acestep15_repaint_end_var.get().strip(),
             "TRANSCRIPTION_AUDIO_FILE": self.transcription_audio_var.get().strip(),
             "TRANSCRIPTION_OUTPUT_DIR": self.transcription_output_dir_var.get().strip(),
             "TRANSCRIPTION_LANGUAGE": self.transcription_language_var.get().strip(),
@@ -1612,10 +1779,13 @@ class MusicCompareGui:
                 f"python={self.acestep_python_var.get().strip() or sys.executable}"
             )
             return
-        if backend == "ace_step_v15":
+        if backend in {"ace_step_v15", "ace_step_v15_turbo", "ace_step_v15_sft"}:
+            config_path = self.acestep15_turbo_config_var.get().strip() if backend != "ace_step_v15_sft" else self.acestep15_sft_config_var.get().strip()
             self._log(
                 f"{label} config: root={self.acestep15_root_var.get().strip() or '<missing>'} | "
                 f"checkpoints={self.acestep15_ckpt_var.get().strip() or '<missing>'} | "
+                f"config={config_path or '<missing>'} | "
+                f"task={self.acestep15_task_type_var.get().strip() or 'auto'} | "
                 f"python={self.acestep15_python_var.get().strip() or sys.executable}"
             )
 

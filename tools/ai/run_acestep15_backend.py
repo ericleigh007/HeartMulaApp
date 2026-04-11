@@ -26,11 +26,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run ACE-Step 1.5 local inference")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--tags", default="")
+    parser.add_argument("--task-type", default="text2music")
     parser.add_argument("--output", required=True)
     parser.add_argument("--source-root", required=True)
     parser.add_argument("--checkpoints-dir", required=True)
     parser.add_argument("--duration", type=float, default=10.0)
     parser.add_argument("--lyrics", default="")
+    parser.add_argument("--source-audio", default="")
+    parser.add_argument("--repainting-start", type=float, default=0.0)
+    parser.add_argument("--repainting-end", type=float, default=-1.0)
+    parser.add_argument("--audio-cover-strength", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=-1)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--config-path", default="acestep-v15-turbo")
@@ -58,12 +63,20 @@ def main() -> None:
     source_root = Path(args.source_root).resolve()
     checkpoints_dir = Path(args.checkpoints_dir).resolve()
     output_path = Path(args.output).resolve()
+    source_audio = args.source_audio.strip()
+    task_type = (args.task_type or "text2music").strip().lower() or "text2music"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not source_root.exists():
         raise SystemExit(f"ACE-Step 1.5 source root does not exist: {source_root}")
     if not checkpoints_dir.exists():
         raise SystemExit(f"ACE-Step 1.5 checkpoints directory does not exist: {checkpoints_dir}")
+    if task_type not in {"text2music", "cover", "repaint"}:
+        raise SystemExit(f"Unsupported ACE-Step 1.5 task type: {task_type}")
+    if task_type in {"cover", "repaint"} and not source_audio:
+        raise SystemExit(f"ACE-Step 1.5 task '{task_type}' requires --source-audio")
+    if source_audio and not Path(source_audio).exists():
+        raise SystemExit(f"ACE-Step 1.5 source audio does not exist: {source_audio}")
 
     if str(source_root) not in sys.path:
         sys.path.insert(0, str(source_root))
@@ -103,11 +116,15 @@ def main() -> None:
             raise SystemExit(f"ACE-Step 1.5 LM init failed: {lm_status}")
 
     params = GenerationParams(
-        task_type="text2music",
+        task_type=task_type,
         caption=merged_caption,
         lyrics="[Instrumental]" if instrumental else normalized_lyrics,
         instrumental=instrumental,
         duration=max(1.0, float(args.duration)),
+        src_audio=source_audio or None,
+        repainting_start=float(args.repainting_start),
+        repainting_end=float(args.repainting_end),
+        audio_cover_strength=float(args.audio_cover_strength),
         inference_steps=max(1, int(args.inference_steps)),
         guidance_scale=float(args.guidance_scale),
         seed=int(args.seed),
@@ -151,6 +168,11 @@ def main() -> None:
                 "config_path": args.config_path,
                 "init_llm": init_llm,
                 "lm_model_path": args.lm_model_path if init_llm else None,
+                "task_type": task_type,
+                "source_audio": source_audio or None,
+                "audio_cover_strength": float(args.audio_cover_strength),
+                "repainting_start": float(args.repainting_start),
+                "repainting_end": float(args.repainting_end),
             },
             indent=2,
         )

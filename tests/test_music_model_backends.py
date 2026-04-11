@@ -232,13 +232,15 @@ class MusicModelBackendsTests(unittest.TestCase):
         self.assertTrue(recorded["command"][1].endswith("run_acestep_backend.py"))
         self.assertIn(str(ckpt_dir.resolve()), recorded["command"])
 
-    def test_acestep15_backend_passes_tags_lyrics_and_seed(self) -> None:
+    def test_acestep15_turbo_backend_passes_tags_lyrics_and_seed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source_root = root / "ace-step-1.5"
             checkpoints_dir = root / "checkpoints"
+            lm_dir = checkpoints_dir / "acestep-5Hz-lm-1.7B"
             source_root.mkdir()
             checkpoints_dir.mkdir()
+            lm_dir.mkdir()
             output_dir = root / "out"
             request = MusicGenRequest(
                 prompt="cinematic rise",
@@ -252,7 +254,7 @@ class MusicModelBackendsTests(unittest.TestCase):
 
             def fake_run_subprocess(command, **_kwargs):
                 recorded["command"] = command
-                (output_dir / "ace_step_v15_output.wav").write_bytes(b"RIFFtest")
+                (output_dir / "ace_step_v15_turbo_output.wav").write_bytes(b"RIFFtest")
 
                 class Completed:
                     returncode = 0
@@ -270,7 +272,7 @@ class MusicModelBackendsTests(unittest.TestCase):
                 with patch("tools.ai.music_model_backends.python_exists", return_value=True):
                     with patch("tools.ai.music_model_backends.find_missing_python_modules", return_value=[]):
                         with patch("tools.ai.music_model_backends._run_subprocess", side_effect=fake_run_subprocess):
-                            result = ACEStep15Backend().run(request)
+                            result = ACEStep15Backend(name="ace_step_v15_turbo", output_stem="ace_step_v15_turbo").run(request)
 
         self.assertTrue(result.success)
         self.assertEqual("C:/ace15/python.exe", recorded["command"][0])
@@ -279,8 +281,174 @@ class MusicModelBackendsTests(unittest.TestCase):
         self.assertIn("orchestral, trailer", recorded["command"])
         self.assertIn("hold the line", recorded["command"])
         self.assertIn("1234", recorded["command"])
+        self.assertIn("--init-llm", recorded["command"])
+        self.assertIn("true", recorded["command"])
+        self.assertIn("--inference-steps", recorded["command"])
+        self.assertIn("--guidance-scale", recorded["command"])
         self.assertEqual("orchestral, trailer", result.metadata["tags"])
         self.assertEqual("hold the line", result.metadata["lyrics"])
+        self.assertTrue(result.metadata["init_llm"])
+        self.assertEqual(8, result.metadata["inference_steps"])
+        self.assertEqual(1.0, result.metadata["guidance_scale"])
+        self.assertEqual("turbo", result.metadata["model_kind"])
+
+    def test_acestep15_sft_backend_uses_cover_mode_with_reference_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "ace-step-1.5"
+            checkpoints_dir = root / "checkpoints"
+            reference_audio = root / "input.wav"
+            source_root.mkdir()
+            checkpoints_dir.mkdir()
+            reference_audio.write_bytes(b"RIFFtest")
+            output_dir = root / "out"
+            request = MusicGenRequest(
+                prompt="lush strings",
+                output_dir=str(output_dir),
+                duration_seconds=2.0,
+                reference_audio=str(reference_audio),
+            )
+            recorded = {}
+
+            def fake_run_subprocess(command, **_kwargs):
+                recorded["command"] = command
+                (output_dir / "ace_step_v15_sft_output.wav").write_bytes(b"RIFFtest")
+
+                class Completed:
+                    returncode = 0
+                    stdout = "ok"
+                    stderr = ""
+
+                return Completed()
+
+            env = {
+                "ACESTEP15_ROOT": str(source_root),
+                "ACESTEP15_CKPT_DIR": str(checkpoints_dir),
+                "ACESTEP15_PYTHON": "C:/ace15/python.exe",
+                "ACESTEP15_TASK_TYPE": "auto",
+                "ACESTEP15_SFT_CONFIG_PATH": "acestep-v15-sft",
+                "ACESTEP15_COVER_STRENGTH": "0.35",
+            }
+            backend = ACEStep15Backend(
+                name="ace_step_v15_sft",
+                output_stem="ace_step_v15_sft",
+                config_env="ACESTEP15_SFT_CONFIG_PATH",
+                default_config_path="acestep-v15-sft",
+            )
+            with patch.dict(os.environ, env, clear=False):
+                with patch("tools.ai.music_model_backends.python_exists", return_value=True):
+                    with patch("tools.ai.music_model_backends.find_missing_python_modules", return_value=[]):
+                        with patch("tools.ai.music_model_backends._run_subprocess", side_effect=fake_run_subprocess):
+                            result = backend.run(request)
+
+        self.assertTrue(result.success)
+        self.assertIn("--task-type", recorded["command"])
+        self.assertIn("cover", recorded["command"])
+        self.assertIn("--source-audio", recorded["command"])
+        self.assertIn(str(reference_audio), recorded["command"])
+        self.assertIn("--audio-cover-strength", recorded["command"])
+        self.assertEqual("cover", result.metadata["task_type"])
+
+    def test_acestep15_sft_backend_defaults_to_50_steps_without_auto_llm(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "ace-step-1.5"
+            checkpoints_dir = root / "checkpoints"
+            source_root.mkdir()
+            checkpoints_dir.mkdir()
+            output_dir = root / "out"
+            request = MusicGenRequest(prompt="detailed chamber pop", output_dir=str(output_dir), duration_seconds=2.0)
+            recorded = {}
+
+            def fake_run_subprocess(command, **_kwargs):
+                recorded["command"] = command
+                (output_dir / "ace_step_v15_sft_output.wav").write_bytes(b"RIFFtest")
+
+                class Completed:
+                    returncode = 0
+                    stdout = "ok"
+                    stderr = ""
+
+                return Completed()
+
+            env = {
+                "ACESTEP15_ROOT": str(source_root),
+                "ACESTEP15_CKPT_DIR": str(checkpoints_dir),
+                "ACESTEP15_PYTHON": "C:/ace15/python.exe",
+                "ACESTEP15_SFT_CONFIG_PATH": "acestep-v15-sft",
+            }
+            backend = ACEStep15Backend(
+                name="ace_step_v15_sft",
+                output_stem="ace_step_v15_sft",
+                config_env="ACESTEP15_SFT_CONFIG_PATH",
+                default_config_path="acestep-v15-sft",
+            )
+            with patch.dict(os.environ, env, clear=False):
+                with patch("tools.ai.music_model_backends.python_exists", return_value=True):
+                    with patch("tools.ai.music_model_backends.find_missing_python_modules", return_value=[]):
+                        with patch("tools.ai.music_model_backends._run_subprocess", side_effect=fake_run_subprocess):
+                            result = backend.run(request)
+
+        self.assertTrue(result.success)
+        self.assertIn("--inference-steps", recorded["command"])
+        steps_value = recorded["command"][recorded["command"].index("--inference-steps") + 1]
+        guidance_value = recorded["command"][recorded["command"].index("--guidance-scale") + 1]
+        init_llm_value = recorded["command"][recorded["command"].index("--init-llm") + 1]
+        self.assertEqual("50", steps_value)
+        self.assertEqual("7.0", guidance_value)
+        self.assertEqual("false", init_llm_value)
+        self.assertEqual("sft", result.metadata["model_kind"])
+        self.assertEqual(50, result.metadata["inference_steps"])
+        self.assertEqual(7.0, result.metadata["guidance_scale"])
+        self.assertFalse(result.metadata["init_llm"])
+
+    def test_acestep15_sft_backend_auto_enables_lm_when_shared_lm_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "ace-step-1.5"
+            checkpoints_dir = root / "checkpoints"
+            lm_dir = checkpoints_dir / "acestep-5Hz-lm-1.7B"
+            source_root.mkdir()
+            checkpoints_dir.mkdir()
+            lm_dir.mkdir()
+            output_dir = root / "out"
+            request = MusicGenRequest(prompt="detailed chamber pop", output_dir=str(output_dir), duration_seconds=2.0)
+            recorded = {}
+
+            def fake_run_subprocess(command, **_kwargs):
+                recorded["command"] = command
+                (output_dir / "ace_step_v15_sft_output.wav").write_bytes(b"RIFFtest")
+
+                class Completed:
+                    returncode = 0
+                    stdout = "ok"
+                    stderr = ""
+
+                return Completed()
+
+            env = {
+                "ACESTEP15_ROOT": str(source_root),
+                "ACESTEP15_CKPT_DIR": str(checkpoints_dir),
+                "ACESTEP15_PYTHON": "C:/ace15/python.exe",
+                "ACESTEP15_SFT_CONFIG_PATH": "acestep-v15-sft",
+            }
+            backend = ACEStep15Backend(
+                name="ace_step_v15_sft",
+                output_stem="ace_step_v15_sft",
+                config_env="ACESTEP15_SFT_CONFIG_PATH",
+                default_config_path="acestep-v15-sft",
+            )
+            with patch.dict(os.environ, env, clear=False):
+                with patch("tools.ai.music_model_backends.python_exists", return_value=True):
+                    with patch("tools.ai.music_model_backends.find_missing_python_modules", return_value=[]):
+                        with patch("tools.ai.music_model_backends._run_subprocess", side_effect=fake_run_subprocess):
+                            result = backend.run(request)
+
+        self.assertTrue(result.success)
+        init_llm_value = recorded["command"][recorded["command"].index("--init-llm") + 1]
+        self.assertEqual("true", init_llm_value)
+        self.assertTrue(result.metadata["init_llm"])
+        self.assertEqual("acestep-5Hz-lm-1.7B", result.metadata["lm_model_path"])
 
     def test_melodyflow_backend_uses_configured_python_and_model_dir(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

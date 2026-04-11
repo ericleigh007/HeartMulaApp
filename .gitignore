@@ -3,9 +3,11 @@ __pycache__/
 .tmp/
 .venv/
 .venv-*/
+# Large local model assets and repo-local loader checkouts
 models/
 third_party/
 bin/
 build/
 dist/
 *.egg-info/
+

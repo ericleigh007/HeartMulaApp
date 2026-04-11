@@ -6,7 +6,7 @@ comparison report.
 CLI:
   python tools/ai/compare_music_models.py \
       --prompt "dark ambient techno with metallic percussion" \
-        --models heartmula_hny heartmula_base melodyflow ace_step ace_step_v15 \
+                --models heartmula_hny heartmula_base melodyflow ace_step ace_step_v15_turbo ace_step_v15_sft \
       --output-dir .tmp/music_compare/demo
 
 Output JSON to stdout:
@@ -100,8 +100,18 @@ def main() -> None:
     parser.add_argument(
         "--models",
         nargs="+",
-        choices=["heartmula", "heartmula_hny", "heartmula_base", "audiox", "melodyflow", "ace_step", "ace_step_v15"],
-        default=["heartmula_hny", "heartmula_base", "melodyflow", "ace_step"],
+        choices=[
+            "heartmula",
+            "heartmula_hny",
+            "heartmula_base",
+            "audiox",
+            "melodyflow",
+            "ace_step",
+            "ace_step_v15",
+            "ace_step_v15_turbo",
+            "ace_step_v15_sft",
+        ],
+        default=["heartmula_hny", "heartmula_base", "melodyflow", "ace_step", "ace_step_v15_turbo", "ace_step_v15_sft"],
     )
     parser.add_argument("--output-dir", default=".tmp/music_compare/latest")
     parser.add_argument("--duration", type=float, default=15.0)

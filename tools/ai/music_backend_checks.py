@@ -20,6 +20,7 @@ HEARTMULA_DEFAULT_GEN_REPO = "HeartMuLa/HeartMuLaGen"
 MELODYFLOW_DEFAULT_MODEL_REPO = "facebook/melodyflow-t24-30secs"
 ACESTEP_DEFAULT_MODEL_REPO = "ACE-Step/ACE-Step-v1-3.5B"
 ACESTEP15_DEFAULT_MODEL_REPO = "ACE-Step/Ace-Step1.5"
+ACESTEP15_SFT_MODEL_REPO = "ACE-Step/acestep-v15-sft"
 
 
 def _melodyflow_space_repo_candidates(configured: str | None = None) -> list[Path]:
@@ -233,7 +234,8 @@ def collect_preflight_issues(models: list[str], settings: dict[str, str]) -> lis
                 f"or configure ACE-Step Template. Recommended repo: {ACESTEP_DEFAULT_MODEL_REPO}."
             )
 
-    if "ace_step_v15" in models and not settings.get("ACESTEP15_COMMAND_TEMPLATE", "").strip():
+    requested_acestep15_models = {name for name in models if name in {"ace_step_v15", "ace_step_v15_turbo", "ace_step_v15_sft"}}
+    if requested_acestep15_models and not settings.get("ACESTEP15_COMMAND_TEMPLATE", "").strip():
         acestep15_root = settings.get("ACESTEP15_ROOT", "").strip()
         acestep15_python = resolve_python_executable(settings.get("ACESTEP15_PYTHON"))
         acestep15_ckpt = settings.get("ACESTEP15_CKPT_DIR", "").strip()
@@ -256,6 +258,11 @@ def collect_preflight_issues(models: list[str], settings: dict[str, str]) -> lis
             issues.append(
                 "ACE-Step 1.5: set ACESTEP15_CKPT_DIR to the local checkpoints directory "
                 f"or configure ACE-Step 1.5 Template. Recommended repo: {ACESTEP15_DEFAULT_MODEL_REPO}."
+            )
+        if "ace_step_v15_sft" in requested_acestep15_models and not settings.get("ACESTEP15_SFT_CONFIG_PATH", "").strip():
+            issues.append(
+                "ACE-Step 1.5 SFT: set ACESTEP15_SFT_CONFIG_PATH to an installed SFT model path. "
+                f"Recommended repo: {ACESTEP15_SFT_MODEL_REPO}."
             )
 
     return issues

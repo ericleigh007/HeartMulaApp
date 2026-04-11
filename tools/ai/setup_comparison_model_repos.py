@@ -18,22 +18,79 @@ if __package__ is None or __package__ == "":
 from tools.ai.download_hf_repo import download_hf_repo
 
 
+DEFAULT_ACESTEP15_SHARED_ALLOW_PATTERNS = [
+    "acestep-5Hz-lm-1.7B/*",
+    "acestep-5Hz-lm-1.7B/**",
+    "vae/*",
+    "vae/**",
+    "Qwen3-Embedding-0.6B/*",
+    "Qwen3-Embedding-0.6B/**",
+]
+
+
 MODEL_REPO_MAP = {
     "audiox": {
-        "repo_id": "HKUSTAudio/AudioX-MAF",
-        "local_subdir": "audiox/AudioX-MAF",
+        "downloads": [
+            {
+                "repo_id": "HKUSTAudio/AudioX-MAF",
+                "local_subdir": "audiox/AudioX-MAF",
+            }
+        ],
     },
     "melodyflow": {
-        "repo_id": "facebook/melodyflow-t24-30secs",
-        "local_subdir": "melodyflow/melodyflow-t24-30secs",
+        "downloads": [
+            {
+                "repo_id": "facebook/melodyflow-t24-30secs",
+                "local_subdir": "melodyflow/melodyflow-t24-30secs",
+            }
+        ],
     },
     "ace_step": {
-        "repo_id": "ACE-Step/ACE-Step-v1-3.5B",
-        "local_subdir": "ace-step/ACE-Step-v1-3.5B",
+        "downloads": [
+            {
+                "repo_id": "ACE-Step/ACE-Step-v1-3.5B",
+                "local_subdir": "ace-step/ACE-Step-v1-3.5B",
+            }
+        ],
     },
     "ace_step_v15": {
-        "repo_id": "ACE-Step/Ace-Step1.5",
-        "local_subdir": "ace-step-1.5/checkpoints",
+        "downloads": [
+            {
+                "repo_id": "ACE-Step/Ace-Step1.5",
+                "local_subdir": "ace-step-1.5/checkpoints",
+                "allow_patterns": [
+                    "acestep-v15-turbo/*",
+                    "acestep-v15-turbo/**",
+                    *DEFAULT_ACESTEP15_SHARED_ALLOW_PATTERNS,
+                ],
+            }
+        ],
+    },
+    "ace_step_v15_turbo": {
+        "downloads": [
+            {
+                "repo_id": "ACE-Step/Ace-Step1.5",
+                "local_subdir": "ace-step-1.5/checkpoints",
+                "allow_patterns": [
+                    "acestep-v15-turbo/*",
+                    "acestep-v15-turbo/**",
+                    *DEFAULT_ACESTEP15_SHARED_ALLOW_PATTERNS,
+                ],
+            }
+        ],
+    },
+    "ace_step_v15_sft": {
+        "downloads": [
+            {
+                "repo_id": "ACE-Step/Ace-Step1.5",
+                "local_subdir": "ace-step-1.5/checkpoints",
+                "allow_patterns": DEFAULT_ACESTEP15_SHARED_ALLOW_PATTERNS,
+            },
+            {
+                "repo_id": "ACE-Step/acestep-v15-sft",
+                "local_subdir": "ace-step-1.5/checkpoints/acestep-v15-sft",
+            },
+        ],
     },
 }
 
@@ -43,22 +100,39 @@ def download_comparison_model_repos(destination: str | Path, *, models: list[str
     plan = []
     for model_name in models:
         spec = MODEL_REPO_MAP[model_name]
-        plan.append(
-            {
-                "model": model_name,
-                "repo_id": spec["repo_id"],
-                "local_dir": str(destination_path / spec["local_subdir"]),
-            }
-        )
+        for download_spec in spec["downloads"]:
+            plan.append(
+                {
+                    "model": model_name,
+                    "repo_id": download_spec["repo_id"],
+                    "local_dir": str(destination_path / download_spec["local_subdir"]),
+                    "allow_patterns": list(download_spec.get("allow_patterns") or []),
+                }
+            )
+
+    deduped_plan = []
+    seen = set()
+    for item in plan:
+        key = (item["repo_id"], item["local_dir"], tuple(item.get("allow_patterns") or []))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped_plan.append(item)
 
     if dry_run:
-        return {"ok": True, "dry_run": True, "download_plan": plan}
+        return {"ok": True, "dry_run": True, "download_plan": deduped_plan}
 
     completed = []
-    for item in plan:
-        result = download_hf_repo(item["repo_id"], item["local_dir"], token=token, dry_run=False)
+    for item in deduped_plan:
+        result = download_hf_repo(
+            item["repo_id"],
+            item["local_dir"],
+            token=token,
+            dry_run=False,
+            allow_patterns=item.get("allow_patterns") or None,
+        )
         if not result.get("ok"):
-            result["download_plan"] = plan
+            result["download_plan"] = deduped_plan
             return result
         completed.append(item)
     return {"ok": True, "dry_run": False, "download_plan": completed}

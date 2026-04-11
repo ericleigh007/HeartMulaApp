@@ -31,6 +31,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MELODYFLOW_DEFAULT_MODEL_DIR = REPO_ROOT / "models" / "comparison" / "melodyflow" / "melodyflow-t24-30secs"
 ACESTEP15_DEFAULT_SOURCE_ROOT = REPO_ROOT / "third_party" / "ACE-Step-1.5"
 ACESTEP15_DEFAULT_CHECKPOINTS_DIR = REPO_ROOT / "models" / "comparison" / "ace-step-1.5" / "checkpoints"
+ACESTEP15_TURBO_DEFAULT_CONFIG = "acestep-v15-turbo"
+ACESTEP15_SFT_DEFAULT_CONFIG = "acestep-v15-sft"
+ACESTEP15_SUPPORTED_TASKS = {"text2music", "cover", "repaint"}
+ACESTEP15_TURBO_DEFAULT_STEPS = 8
+ACESTEP15_SFT_DEFAULT_STEPS = 50
+ACESTEP15_DEFAULT_LM_MODEL_PATH = "acestep-5Hz-lm-1.7B"
+ACESTEP15_DEFAULT_LM_BACKEND = "vllm"
 
 
 @dataclass
@@ -105,6 +112,39 @@ def _parse_env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_env_optional_bool(name: str) -> bool | None:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return None
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_first_env_value(keys: list[str], default: str = "") -> str:
+    for key in keys:
+        raw = os.environ.get(key)
+        if raw is not None and raw.strip():
+            return raw.strip()
+    return default
+
+
+def _parse_env_float_from_keys(keys: list[str], default: float) -> float:
+    raw = _get_first_env_value(keys)
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _parse_env_optional_bool_from_keys(keys: list[str]) -> bool | None:
+    for key in keys:
+        raw = os.environ.get(key)
+        if raw is not None and raw.strip():
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return None
+
+
 def _parse_env_float(name: str, default: float) -> float:
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
@@ -120,6 +160,15 @@ def _parse_env_str(name: str, default: str) -> str:
     if raw is None or not raw.strip():
         return default
     return raw.strip()
+
+
+def _classify_acestep15_config(config_path: str) -> str:
+    normalized = (config_path or "").strip().lower()
+    if "turbo" in normalized:
+        return "turbo"
+    if "sft" in normalized:
+        return "sft"
+    return "other"
 
 
 def _compose_descriptor_text(prompt: str | None, tags: str | None) -> str:
@@ -446,21 +495,63 @@ class ACEStepBackend(MusicBackend):
 
 
 class ACEStep15Backend(MusicBackend):
-    name = "ace_step_v15"
+    def __init__(
+        self,
+        *,
+        name: str = "ace_step_v15",
+        output_stem: str | None = None,
+        config_env: str = "ACESTEP15_CONFIG_PATH",
+        default_config_path: str = ACESTEP15_TURBO_DEFAULT_CONFIG,
+        env_prefix: str | None = None,
+    ):
+        self.name = name
+        self.output_stem = output_stem or name
+        self.config_env = config_env
+        self.default_config_path = default_config_path
+        self.env_prefix = env_prefix
 
     def run(self, request: MusicGenRequest) -> MusicBackendResult:
         output_dir = _ensure_dir(request.output_dir).resolve()
-        output_path = (output_dir / "ace_step_v15_output.wav").resolve()
+        output_path = (output_dir / f"{self.output_stem}_output.wav").resolve()
         source_root = Path(os.environ.get("ACESTEP15_ROOT", str(ACESTEP15_DEFAULT_SOURCE_ROOT))).resolve()
         checkpoints_dir = Path(os.environ.get("ACESTEP15_CKPT_DIR", str(ACESTEP15_DEFAULT_CHECKPOINTS_DIR))).resolve()
         python_executable = resolve_python_executable(os.environ.get("ACESTEP15_PYTHON"), fallback=sys.executable)
-        config_path = os.environ.get("ACESTEP15_CONFIG_PATH", "acestep-v15-turbo").strip() or "acestep-v15-turbo"
-        lm_model_path = os.environ.get("ACESTEP15_LM_MODEL_PATH", "acestep-5Hz-lm-1.7B").strip() or "acestep-5Hz-lm-1.7B"
-        lm_backend = os.environ.get("ACESTEP15_LM_BACKEND", "vllm").strip() or "vllm"
-        init_llm = _parse_env_bool("ACESTEP15_INIT_LLM", False)
+        config_path = os.environ.get(self.config_env, "").strip() or os.environ.get("ACESTEP15_CONFIG_PATH", "").strip() or self.default_config_path
+        model_kind = _classify_acestep15_config(config_path)
+        override_keys = lambda suffix: ([f"{self.env_prefix}_{suffix}"] if self.env_prefix else []) + [f"ACESTEP15_{suffix}"]
+        lm_model_path = _get_first_env_value(override_keys("LM_MODEL_PATH"), ACESTEP15_DEFAULT_LM_MODEL_PATH)
+        lm_backend = _get_first_env_value(override_keys("LM_BACKEND"), ACESTEP15_DEFAULT_LM_BACKEND)
+        raw_task_type = os.environ.get("ACESTEP15_TASK_TYPE", "auto").strip().lower() or "auto"
+        init_llm_override = _parse_env_optional_bool_from_keys(override_keys("INIT_LLM"))
         offload_to_cpu = _parse_env_bool("ACESTEP15_OFFLOAD_TO_CPU", False)
-        inference_steps = max(1, int(_parse_env_float("ACESTEP15_INFERENCE_STEPS", 8)))
-        guidance_scale = _parse_env_float("ACESTEP15_GUIDANCE_SCALE", 7.0)
+        default_inference_steps = ACESTEP15_TURBO_DEFAULT_STEPS if model_kind == "turbo" else ACESTEP15_SFT_DEFAULT_STEPS if model_kind == "sft" else ACESTEP15_TURBO_DEFAULT_STEPS
+        default_guidance_scale = 1.0 if model_kind == "turbo" else 7.0
+        inference_steps = max(1, int(_parse_env_float_from_keys(override_keys("INFERENCE_STEPS"), float(default_inference_steps))))
+        guidance_scale = _parse_env_float_from_keys(override_keys("GUIDANCE_SCALE"), default_guidance_scale)
+        repainting_start = _parse_env_float("ACESTEP15_REPAINT_START", 0.0)
+        repainting_end = _parse_env_float("ACESTEP15_REPAINT_END", -1.0)
+        audio_cover_strength = _parse_env_float("ACESTEP15_COVER_STRENGTH", 1.0)
+        lm_model_dir = checkpoints_dir / lm_model_path
+        init_llm = init_llm_override if init_llm_override is not None else model_kind in {"turbo", "sft"} and lm_model_dir.exists()
+        task_type = "cover" if raw_task_type == "auto" and request.reference_audio else "text2music" if raw_task_type == "auto" else raw_task_type
+
+        if task_type not in ACESTEP15_SUPPORTED_TASKS:
+            supported = ", ".join(sorted(ACESTEP15_SUPPORTED_TASKS))
+            return MusicBackendResult(
+                backend=self.name,
+                success=False,
+                error=(
+                    f"Unsupported ACE-Step 1.5 task type: {task_type}. "
+                    f"This app currently exposes: {supported}."
+                ),
+            )
+
+        if task_type in {"cover", "repaint"} and not request.reference_audio:
+            return MusicBackendResult(
+                backend=self.name,
+                success=False,
+                error="ACE-Step 1.5 cover and repaint require Reference Audio to point to a source audio file.",
+            )
 
         if not python_exists(python_executable):
             return MusicBackendResult(
@@ -483,6 +574,17 @@ class ACEStep15Backend(MusicBackend):
                 error=f"Set ACESTEP15_CKPT_DIR to a valid ACE-Step 1.5 checkpoints directory: {checkpoints_dir}",
             )
 
+        if init_llm and not lm_model_dir.exists():
+            return MusicBackendResult(
+                backend=self.name,
+                success=False,
+                error=(
+                    f"ACE-Step 1.5 LM is enabled but the LM checkpoint path is missing: {lm_model_dir}. "
+                    "Download the shared ACE-Step 1.5 LM assets or set ACESTEP15_INIT_LLM=false."
+                ),
+                metadata={"lm_model_path": lm_model_path, "lm_model_dir": str(lm_model_dir)},
+            )
+
         required_modules = ["torch", "torchaudio", "soundfile", "acestep"]
         missing_modules = find_missing_python_modules(python_executable, required_modules)
         if missing_modules:
@@ -503,6 +605,8 @@ class ACEStep15Backend(MusicBackend):
             request.prompt,
             "--tags",
             request.tags or "",
+            "--task-type",
+            task_type,
             "--output",
             str(output_path),
             "--source-root",
@@ -530,6 +634,19 @@ class ACEStep15Backend(MusicBackend):
             "--offload-to-cpu",
             "true" if offload_to_cpu else "false",
         ]
+        if request.reference_audio:
+            command.extend(["--source-audio", request.reference_audio])
+        if task_type == "repaint":
+            command.extend(
+                [
+                    "--repainting-start",
+                    str(repainting_start),
+                    "--repainting-end",
+                    str(repainting_end),
+                ]
+            )
+        if task_type in {"cover", "repaint"}:
+            command.extend(["--audio-cover-strength", str(audio_cover_strength)])
 
         started = time.perf_counter()
         try:
@@ -568,9 +685,17 @@ class ACEStep15Backend(MusicBackend):
                 "lyrics": request.lyrics or "",
                 "effective_descriptor_text": _compose_descriptor_text(request.prompt, request.tags),
                 "config_path": config_path,
+                "model_kind": model_kind,
+                "inference_steps": inference_steps,
+                "guidance_scale": guidance_scale,
                 "lm_model_path": lm_model_path if init_llm else None,
                 "init_llm": init_llm,
                 "source_root": str(source_root),
+                "task_type": task_type,
+                "source_audio": request.reference_audio,
+                "audio_cover_strength": audio_cover_strength if task_type in {"cover", "repaint"} else None,
+                "repainting_start": repainting_start if task_type == "repaint" else None,
+                "repainting_end": repainting_end if task_type == "repaint" else None,
             },
         )
 
@@ -762,6 +887,20 @@ def get_backend_registry() -> dict[str, MusicBackend]:
         "melodyflow": MelodyFlowBackend(),
         "ace_step": ACEStepBackend(),
         "ace_step_v15": ACEStep15Backend(),
+        "ace_step_v15_turbo": ACEStep15Backend(
+            name="ace_step_v15_turbo",
+            output_stem="ace_step_v15_turbo",
+            config_env="ACESTEP15_TURBO_CONFIG_PATH",
+            default_config_path=ACESTEP15_TURBO_DEFAULT_CONFIG,
+            env_prefix="ACESTEP15_TURBO",
+        ),
+        "ace_step_v15_sft": ACEStep15Backend(
+            name="ace_step_v15_sft",
+            output_stem="ace_step_v15_sft",
+            config_env="ACESTEP15_SFT_CONFIG_PATH",
+            default_config_path=ACESTEP15_SFT_DEFAULT_CONFIG,
+            env_prefix="ACESTEP15_SFT",
+        ),
     }
 
 

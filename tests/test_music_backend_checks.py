@@ -164,6 +164,27 @@ class MusicBackendChecksTests(unittest.TestCase):
                         )
         self.assertEqual([], issues)
 
+    def test_collect_preflight_issues_accepts_acestep15_turbo_and_sft_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "ace-step-1.5"
+            ckpt_dir = root / "checkpoints"
+            source_root.mkdir()
+            ckpt_dir.mkdir()
+            with patch("tools.ai.music_backend_checks.python_exists", return_value=True):
+                with patch("tools.ai.music_backend_checks.get_python_runtime_info", return_value={"major": 3, "minor": 11, "micro": 5, "platform": "win32", "system": "Windows"}):
+                    with patch("tools.ai.music_backend_checks.find_missing_python_modules", return_value=[]):
+                        issues = collect_preflight_issues(
+                            ["ace_step_v15_turbo", "ace_step_v15_sft"],
+                            {
+                                "ACESTEP15_ROOT": str(source_root),
+                                "ACESTEP15_CKPT_DIR": str(ckpt_dir),
+                                "ACESTEP15_PYTHON": sys.executable,
+                                "ACESTEP15_SFT_CONFIG_PATH": "acestep-v15-sft",
+                            },
+                        )
+        self.assertEqual([], issues)
+
 
 if __name__ == "__main__":
     unittest.main()

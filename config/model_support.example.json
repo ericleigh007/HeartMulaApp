@@ -1,0 +1,11 @@
+{
+  "models": {
+    "heartmula_hny": true,
+    "heartmula_base": true,
+    "melodyflow": true,
+    "ace_step": true,
+    "ace_step_v15_turbo": true,
+    "ace_step_v15_sft": true,
+    "audiox": false
+  }
+}

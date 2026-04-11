@@ -7,10 +7,11 @@ This repository is the app layer. The underlying model libraries and checkpoints
 ## Current Status
 
 - HeartMuLa Happy New Year and HeartMuLa Base 3B are supported in the comparison app.
-- ACE-Step v1-3.5B and ACE-Step 1.5 are available as separate backend paths.
+- ACE-Step v1-3.5B plus ACE-Step 1.5 Turbo and ACE-Step 1.5 SFT are available as separate backend paths.
 - The GUI supports separate prompt, lyrics, and tags inputs, remembered text fields, a clear-text action, hover hints for backend input support, and improved left-pane scrolling.
 - MelodyFlow local generation uses the published MelodyFlow Space code path instead of the older local Audiocraft reconstruction.
 - The standalone AIMusicApp regression suite passes from this repo root.
+- The Tkinter desktop UI now has unattended integration coverage for comparison and transcription flows.
 
 ## What This App Does
 
@@ -27,7 +28,8 @@ This repository is the app layer. The underlying model libraries and checkpoints
 - HeartMuLa Base 3B
 - MelodyFlow
 - ACE-Step v1-3.5B
-- ACE-Step 1.5
+- ACE-Step 1.5 Turbo
+- ACE-Step 1.5 SFT
 
 ## Repository Layout
 
@@ -68,6 +70,20 @@ Optional full asset bootstrap:
 bootstrap_AIMusicApp.bat --download-models
 ```
 
+Download only specific supported backends:
+
+```powershell
+bootstrap_AIMusicApp.bat --download-models --models ace_step_v15_turbo ace_step_v15_sft
+```
+
+Drive model selection from a JSON file:
+
+```powershell
+copy config\model_support.example.json .tmp\model_support.json
+# Edit .tmp\model_support.json to enable only the backends you want locally.
+bootstrap_AIMusicApp.bat --download-models --model-config .tmp\model_support.json
+```
+
 Optional AudioX asset bootstrap:
 
 ```powershell
@@ -81,6 +97,8 @@ bootstrap_AIMusicApp.bat --dry-run
 ```
 
 The bootstrap summary is written to `.tmp/bootstrap_summary.json` on non-dry runs.
+
+The repo-local example selection file lives at `config/model_support.example.json`. The repository already ignores `models/`, so downloaded checkpoints remain local and are not staged for git.
 
 ## Launch The App
 
@@ -113,11 +131,12 @@ Typical local pieces:
 - `.venv-melodyflow` for MelodyFlow
 - `.tmp/MelodyFlowSpace` for the official MelodyFlow Space repo used by the working local runner
 - `.venv-acestep` for ACE-Step
-- `.venv-acestep15` for ACE-Step 1.5
+- `third_party/ACE-Step-1.5/.venv` for ACE-Step 1.5
 - `.venv-separator310` for transcription and vocal separation
 - `models/heartmula/happy-new-year` for HeartMuLa HNY checkpoints
 - `models/heartmula/base` for HeartMuLa Base checkpoints
 - `models/comparison/...` for MelodyFlow, ACE-Step, and ACE-Step 1.5 model folders
+- `config/model_support.example.json` as the example bootstrap selection file for choosing which backends to support locally
 
 Repo-local backend env setup helpers:
 
@@ -128,6 +147,12 @@ Repo-local backend env setup helpers:
 - `setup_acestep15_env.bat`
 
 These scripts create the corresponding `.venv*` directory under the repo and install the best-known package surface for that backend. The loader-specific scripts expect the corresponding checkout under `third_party/`, so run `bootstrap_AIMusicApp.bat` first.
+
+ACE-Step 1.5 note:
+
+- `setup_acestep15_env.bat` now uses the upstream `uv sync` workflow inside `third_party/ACE-Step-1.5`
+- the resulting interpreter lives at `third_party/ACE-Step-1.5/.venv/Scripts/python.exe`
+- the GUI auto-detects that interpreter before falling back to `.venv-acestep15`
 
 ## Build And Environment Notes
 
@@ -149,6 +174,8 @@ Minimum operational checklist:
 5. Ensure `.venv-heartmula` can import `heartlib` if you want HeartMuLa.
 6. Ensure each optional backend environment is installed only if you intend to use that backend.
 6. Run `Check Setup` in the app before your first comparison run.
+
+If you want a smaller local install, use either `--models ...` or `--model-config ...` when running `bootstrap_AIMusicApp.bat --download-models` so only the selected backend assets are downloaded.
 
 ## Packaging And Build
 
@@ -194,6 +221,24 @@ Expected smoke-test result:
 - `aimusicapp-check-backends --help` prints usage successfully
 - the repo-local test suite still passes from the repo root
 
+Desktop UI regression test:
+
+```powershell
+run_desktop_regression_AIMusicApp.bat -q
+```
+
+This wrapper selects a usable Python interpreter, disables unrelated pytest plugin autoload, and runs the desktop regression gate for [tests/test_music_compare_gui_desktop.py](tests/test_music_compare_gui_desktop.py) plus [tests/test_music_compare_gui_settings.py](tests/test_music_compare_gui_settings.py).
+
+The suite launches the real Tkinter interface, drives the actual widgets without a human operator, and validates desktop regression coverage for setup checks, comparison runs, single-model generation, transcription, ratings persistence, and core UI state changes using deterministic test doubles.
+
+Full regression gate:
+
+```powershell
+run_regression_AIMusicApp.bat -q
+```
+
+This wrapper runs the setup, backend wiring, comparison integration, bootstrap planning, GUI settings, and unattended desktop UI suites together as a single regression command.
+
 ## Main Window Overview
 
 The window has three working areas:
@@ -228,12 +273,16 @@ Use this tab to configure generation backends before running comparisons.
 - `MelodyFlow Model Dir` and Python path
 - `ACE-Step v1-3.5B Checkpoints` and Python path
 - `ACE-Step 1.5 Root`, `ACE-Step 1.5 Checkpoints`, and Python path
+- `ACE-Step 1.5 Turbo Config` and `ACE-Step 1.5 SFT Config`
+- shared `ACE-Step 1.5 Task`, `Cover Strength`, `Repaint Start`, and `Repaint End`
 
 MelodyFlow note:
 
 - the working local path uses the official `MelodyFlow` implementation from `.tmp/MelodyFlowSpace`
 - you can override that checkout with `MELODYFLOW_SPACE_DIR`
-- the current local runner is text-only in the comparison UI
+- the current local runner now exposes `text2music`, `cover`, and `repaint` for the ACE-Step 1.5 Turbo and SFT backends
+- `Task = auto` keeps normal text generation when `Reference Audio` is empty and switches ACE-Step 1.5 Turbo and SFT to cover mode when `Reference Audio` is set
+- `extract`, `lego`, and `complete` remain base-only upstream tasks and are not exposed here because this app is intentionally comparing the non-base 1.5 models
 - the backend applies a `torch.load(..., weights_only=False)` compatibility shim because the released checkpoints predate the PyTorch 2.6 default change
 
 ### How To Use The Backends Tab
@@ -248,7 +297,9 @@ MelodyFlow note:
 6. Use `Resident Mode` only when you want speed and have enough VRAM.
 7. Use `Staged Decode` when testing 12 GB class cards or other tight GPU budgets.
 8. Configure either ACE-Step line only if you intend to use it.
-9. Return to the top controls, enter your prompt, choose duration, and click `Run Comparison` or `Generate` on a single model card.
+9. For ACE-Step 1.5 Turbo and SFT comparisons, leave `ACE-Step 1.5 Task` on `auto` for ordinary text generation.
+10. Set `Reference Audio` plus `ACE-Step 1.5 Task = repaint` only when you want repaint behavior instead of cover behavior.
+11. Return to the top controls, enter your prompt, choose duration, and click `Run Comparison` or `Generate` on a single model card.
 
 ### Recommended HeartMuLa Modes
 
@@ -313,7 +364,7 @@ The top area drives all generation runs.
 - `Seed`: optional deterministic seed
 - `Tags`: extra tag string for models that use tag conditioning
 - `Output Dir`: destination for generated audio and summaries
-- `Reference Audio`: reserved for backends that can use source audio conditioning
+- `Reference Audio`: used by ACE-Step 1.5 Turbo and ACE-Step 1.5 SFT for `cover` and `repaint` tasks, and reserved for other backends that may later use source-audio conditioning
 
 ### Typical Generation Workflow
 

@@ -24,8 +24,8 @@ def main() -> None:
     parser.add_argument(
         "--models",
         nargs="+",
-        choices=["heartmula", "heartmula_hny", "heartmula_base", "audiox", "melodyflow", "ace_step", "ace_step_v15"],
-        default=["heartmula_hny", "heartmula_base", "melodyflow", "ace_step"],
+        choices=["heartmula", "heartmula_hny", "heartmula_base", "audiox", "melodyflow", "ace_step", "ace_step_v15", "ace_step_v15_turbo", "ace_step_v15_sft"],
+        default=["heartmula_hny", "heartmula_base", "melodyflow", "ace_step", "ace_step_v15_turbo", "ace_step_v15_sft"],
     )
     args = parser.parse_args()
 
@@ -49,6 +49,7 @@ def main() -> None:
         "ACESTEP15_ROOT": os.environ.get("ACESTEP15_ROOT", ""),
         "ACESTEP15_PYTHON": os.environ.get("ACESTEP15_PYTHON", sys.executable),
         "ACESTEP15_CKPT_DIR": os.environ.get("ACESTEP15_CKPT_DIR", ""),
+        "ACESTEP15_SFT_CONFIG_PATH": os.environ.get("ACESTEP15_SFT_CONFIG_PATH", ""),
     }
     issues = collect_preflight_issues(args.models, settings)
     payload = {
