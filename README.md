@@ -4,14 +4,16 @@ AIMusicApp is a standalone local desktop workstation for comparing music-generat
 
 This repository is the app layer. The underlying model libraries and checkpoints are expected to live under this repo in `third_party/` and `models/`, so the app can be cloned and operated independently of the old workspace layout.
 
-## Current Status
+## Latest Changes
 
-- HeartMuLa Happy New Year and HeartMuLa Base 3B are supported in the comparison app.
-- ACE-Step v1-3.5B plus ACE-Step 1.5 Turbo and ACE-Step 1.5 SFT are available as separate backend paths.
-- The GUI supports separate prompt, lyrics, and tags inputs, remembered text fields, a clear-text action, hover hints for backend input support, and improved left-pane scrolling.
-- MelodyFlow local generation uses the published MelodyFlow Space code path instead of the older local Audiocraft reconstruction.
-- The standalone AIMusicApp regression suite passes from this repo root.
-- The Tkinter desktop UI now has unattended integration coverage for comparison and transcription flows.
+- ACE-Step 1.5 Turbo and ACE-Step 1.5 SFT are now first-class comparison backends with separate model paths, model-specific defaults, and shared task support for `text2music`, `cover`, and `repaint`.
+- The GUI now exposes ACE-Step 1.5 Turbo and SFT settings directly, including their recommended default configs, LM settings, inference steps, and guidance values, while still allowing manual overrides.
+- The launcher and GUI now recover more reliably from stale backend Python settings by preferring a detected working ACE-Step 1.5 interpreter and seeding repo-local ACE-Step 1.5 defaults when present.
+- Bootstrap and setup flows now support narrower model downloads, JSON-driven model selection, and the upstream `uv sync` environment path for ACE-Step 1.5.
+- The desktop app now has unattended Tkinter integration coverage for comparison and transcription workflows, and the broader repo-local regression wrappers were expanded to include that coverage.
+- Existing app quality-of-life improvements remain in place, including separate prompt, lyrics, and tags inputs, remembered text fields, a clear-text action, hover hints for backend input support, and improved left-pane scrolling.
+- MelodyFlow local generation continues to use the published MelodyFlow Space code path instead of the older local Audiocraft reconstruction.
+- HeartMuLa Happy New Year and HeartMuLa Base 3B remain supported in the comparison app alongside the newer ACE-Step paths.
 
 ## What This App Does
 
@@ -24,12 +26,12 @@ This repository is the app layer. The underlying model libraries and checkpoints
 
 ## Supported Backends In The UI
 
+- ACE-Step 1.5 Turbo
+- ACE-Step 1.5 SFT
 - HeartMuLa Happy New Year
 - HeartMuLa Base 3B
 - MelodyFlow
 - ACE-Step v1-3.5B
-- ACE-Step 1.5 Turbo
-- ACE-Step 1.5 SFT
 
 ## Repository Layout
 
@@ -108,6 +110,11 @@ Preferred launcher:
 launch_AIMusicApp.bat
 ```
 
+The launcher now does two useful things automatically:
+
+- seeds the default ACE-Step 1.5 root, checkpoints, Turbo config, SFT config, and task settings when those paths exist under this repo
+- chooses the first Python interpreter that can actually import the AIMusicApp UI dependencies, instead of blindly using a stale saved path
+
 Direct Python launch from the repo root:
 
 ```powershell
@@ -153,6 +160,19 @@ ACE-Step 1.5 note:
 - `setup_acestep15_env.bat` now uses the upstream `uv sync` workflow inside `third_party/ACE-Step-1.5`
 - the resulting interpreter lives at `third_party/ACE-Step-1.5/.venv/Scripts/python.exe`
 - the GUI auto-detects that interpreter before falling back to `.venv-acestep15`
+- the ACE-Step 1.5 setup path expects a compatible Python in the `>=3.11, <3.13` range, with `3.12` preferred for the upstream workflow
+- if you need to override the base interpreter selection, set `ACESTEP15_BASE_PYTHON` or pass `--base-python` to `tools/common/setup_backend_env.py acestep15`
+- if `uv` is not already on `PATH`, install it with the upstream helper in `third_party/ACE-Step-1.5` or point `UV_EXE` at a working `uv.exe`
+
+Example ACE-Step 1.5 setup paths:
+
+```powershell
+setup_acestep15_env.bat
+```
+
+```powershell
+python tools\common\setup_backend_env.py acestep15 --base-python C:\path\to\python312.exe --recreate
+```
 
 ## Build And Environment Notes
 
@@ -229,6 +249,8 @@ run_desktop_regression_AIMusicApp.bat -q
 
 This wrapper selects a usable Python interpreter, disables unrelated pytest plugin autoload, and runs the desktop regression gate for [tests/test_music_compare_gui_desktop.py](tests/test_music_compare_gui_desktop.py) plus [tests/test_music_compare_gui_settings.py](tests/test_music_compare_gui_settings.py).
 
+It expects an interpreter that can import `tkinter`, `pytest`, `numpy`, `soundfile`, `PIL`, `scipy`, and `imageio_ffmpeg`. `setup_app_env.bat` installs the needed app-side test surface for this wrapper.
+
 The suite launches the real Tkinter interface, drives the actual widgets without a human operator, and validates desktop regression coverage for setup checks, comparison runs, single-model generation, transcription, ratings persistence, and core UI state changes using deterministic test doubles.
 
 Full regression gate:
@@ -238,6 +260,8 @@ run_regression_AIMusicApp.bat -q
 ```
 
 This wrapper runs the setup, backend wiring, comparison integration, bootstrap planning, GUI settings, and unattended desktop UI suites together as a single regression command.
+
+On Windows, this is the broadest repo-local regression command for the app layer after backend smoke checks.
 
 ## Main Window Overview
 
